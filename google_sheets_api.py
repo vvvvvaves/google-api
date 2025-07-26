@@ -1,15 +1,22 @@
 import json
 from .creds_and_service import get_credentials, get_sheets_service
 from googleapiclient.errors import HttpError
+import google_auth_httplib2
+import httplib2
 
-
+"""
+The google-api-python-client library is built on top of the httplib2 library, which is not thread-safe. Therefore, if you are running as a multi-threaded application, each thread that you are making requests from must have its own instance of httplib2.Http().
+https://github.com/nithinmurali/pygsheets/issues/291
+https://googleapis.github.io/google-api-python-client/docs/thread_safety.html
+"""
 def create_sheet(service, title):
     try:
+        http = google_auth_httplib2.AuthorizedHttp(get_credentials(), http=httplib2.Http())
         spreadsheet = {"properties": {"title": title}}
         spreadsheet = (
             service.spreadsheets()
             .create(body=spreadsheet, fields="spreadsheetId")
-            .execute()
+            .execute(http=http)
         )
         print(f"Spreadsheet ID: {(spreadsheet.get('spreadsheetId'))}")
         return spreadsheet.get("spreadsheetId")
@@ -29,7 +36,8 @@ def add_sheet_to_spreadsheet(service, spreadsheet_id, sheet_title=None):
     try:
         # If no title provided, generate 'SheetN' where N is next available
         if sheet_title is None:
-            spreadsheet = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+            http = google_auth_httplib2.AuthorizedHttp(get_credentials(), http=httplib2.Http())
+            spreadsheet = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute(http=http)
             existing_titles = [sheet['properties']['title'] for sheet in spreadsheet.get('sheets', [])]
             sheet_title = f"Sheet{len(existing_titles) + 1}"
         request_body = {
@@ -43,10 +51,11 @@ def add_sheet_to_spreadsheet(service, spreadsheet_id, sheet_title=None):
                 }
             ]
         }
+        http = google_auth_httplib2.AuthorizedHttp(get_credentials(), http=httplib2.Http())
         response = service.spreadsheets().batchUpdate(
             spreadsheetId=spreadsheet_id,
             body=request_body
-        ).execute()
+        ).execute(http=http)
         new_sheet_id = response['replies'][0]['addSheet']['properties']['sheetId']
         print(f"Added sheet '{sheet_title}' with ID {new_sheet_id}")
         return new_sheet_id
@@ -127,10 +136,11 @@ def create_table_from_schema(service, spreadsheet_id, sheet_id, schema_path, tab
     }
 
     try:
+        http = google_auth_httplib2.AuthorizedHttp(get_credentials(), http=httplib2.Http())
         response = service.spreadsheets().batchUpdate(
             spreadsheetId=spreadsheet_id,
             body={"requests": [table_request]}
-        ).execute()
+        ).execute(http=http)
         print("Table created:", response)
 
         # Set default column width for all columns in the table
@@ -148,10 +158,11 @@ def create_table_from_schema(service, spreadsheet_id, sheet_id, schema_path, tab
                 "fields": "pixelSize"
             }
         }
+        http = google_auth_httplib2.AuthorizedHttp(get_credentials(), http=httplib2.Http())
         width_response = service.spreadsheets().batchUpdate(
             spreadsheetId=spreadsheet_id,
             body={"requests": [column_width_request]}
-        ).execute()
+        ).execute(http=http)
         print("Column width set:", width_response)
 
         # Set text wrapping for the table range
@@ -172,10 +183,11 @@ def create_table_from_schema(service, spreadsheet_id, sheet_id, schema_path, tab
                 "fields": "userEnteredFormat.wrapStrategy"
             }
         }
+        http = google_auth_httplib2.AuthorizedHttp(get_credentials(), http=httplib2.Http())
         wrap_response = service.spreadsheets().batchUpdate(
             spreadsheetId=spreadsheet_id,
             body={"requests": [wrap_request]}
-        ).execute()
+        ).execute(http=http)
         print("Text wrapping applied:", wrap_response)
         return response
     except HttpError as error:
@@ -188,7 +200,8 @@ def _get_sheet_name_by_id(service, spreadsheet_id, sheet_id):
     Helper to get the sheet name from its ID using the Sheets API.
     """
     try:
-        spreadsheet = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+        http = google_auth_httplib2.AuthorizedHttp(get_credentials(), http=httplib2.Http())
+        spreadsheet = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute(http=http)
         for sheet in spreadsheet.get('sheets', []):
             if sheet['properties']['sheetId'] == sheet_id:
                 return sheet['properties']['title']
@@ -214,7 +227,19 @@ def add_rows_to_sheet(service, spreadsheet_id, sheet_id, data_dicts, column_orde
     # Prepare values in correct order
     values = []
     for item in data_dicts:
-        row = [item.get(col, "") for col in column_order]
+        row = []
+        for col in column_order:
+            col_value = item.get(col, "")
+            if col_value is None:
+                row.append("")
+            elif isinstance(col_value, list):
+                if len(col_value) > 0:
+                    str_value = " ".join(col_value)
+                else:
+                    str_value = ""
+                row.append(str_value)
+            else:
+                row.append(col_value)
         values.append(row)
 
     # Get sheet name from sheet_id
@@ -227,17 +252,20 @@ def add_rows_to_sheet(service, spreadsheet_id, sheet_id, data_dicts, column_orde
         'values': values
     }
     try:
+        http = google_auth_httplib2.AuthorizedHttp(get_credentials(), http=httplib2.Http())
         result = service.spreadsheets().values().append(
             spreadsheetId=spreadsheet_id,
             range=f'{sheet_name}!A1',  # Assumes table starts at A1
             valueInputOption='USER_ENTERED',
             insertDataOption='INSERT_ROWS',
             body=body
-        ).execute()
+        ).execute(http=http)
         print(f"{len(values)} row(s) appended.")
         return result
     except HttpError as error:
         print(f"An error occurred: {error}")
+        if error.response_code == 400:
+            print(json.dumps(data_dicts, indent=4))
         return None
 
 

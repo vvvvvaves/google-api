@@ -1,77 +1,47 @@
-# Create credentials from the TOKEN dictionary
-from oauth2client.client import OAuth2Credentials
-import json
 import os
-from oauth2client import client
-from oauth2client import tools
-from oauth2client.file import Storage
-import google.auth
+import json
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
+from google.auth.transport.requests import Request
 
-def get_credentials_from_client_secrets(client_secrets_path='client_secrets.json'):
-    """
-    Get credentials from client secrets.
-    Use this function when you get access exception due to expired token / "invalid_grant".
-    """
-
-    SCOPES = [
-        'https://www.googleapis.com/auth/drive.file',
-    ]
-
-    # Load client secrets
-    if os.path.exists(client_secrets_path):
-        with open(client_secrets_path, 'r') as f:
-            client_secrets = json.load(f)
-    elif os.environ.get('CLIENT_SECRET'):
-        client_secrets = json.loads(os.environ.get('CLIENT_SECRET'))
-    else:
-        raise FileNotFoundError("client_secrets.json not found and CLIENT_SECRET environment variable is not set")
-
-    # Create flow object from client secrets
-    flow = client.flow_from_clientsecrets(
-        client_secrets_path,
-        SCOPES,
-        redirect_uri='http://localhost'
-    )
-    
-    # Run local server to get authorization
-    creds = tools.run_flow(flow, Storage('token.json'))
-
-    return creds
-
-def get_credentials_from_token(token_path='token.json'):
-    from oauth2client.client import OAuth2Credentials
-    import json
-    import os
-
-    if os.path.exists(token_path):
-        with open(token_path, 'r') as f:
-            TOKEN = json.load(f)
-    elif os.environ.get('TOKEN'):
-        TOKEN = json.loads(os.environ.get('TOKEN'))
-    else:
-        raise FileNotFoundError("token.json not found and TOKEN environment variable is not set")
-    
-    TOKEN.pop('invalid')
-    TOKEN.pop('_class')
-    TOKEN.pop('_module')
-
-    creds = OAuth2Credentials(**TOKEN)
-    
-    return creds
+SCOPES = [
+    'https://www.googleapis.com/auth/drive.file',
+]
 
 def get_credentials(token_path='token.json', client_secrets_path='client_secrets.json'):
+    """
+    Get Google API credentials using google-auth and google-auth-oauthlib.
+    Handles token refresh and initial OAuth flow as needed.
+    """
+    creds = None
     if os.path.exists(token_path):
-        return get_credentials_from_token(token_path)
-    else:
-        return get_credentials_from_client_secrets(client_secrets_path)
+        creds = Credentials.from_authorized_user_file(token_path, SCOPES)
+    # If there are no (valid) credentials available, let the user log in.
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            flow = InstalledAppFlow.from_client_secrets_file(client_secrets_path, SCOPES)
+            creds = flow.run_local_server(port=0)
+        # Save the credentials for the next run
+        with open(token_path, 'w') as token:
+            token.write(creds.to_json())
+    return creds
 
 def get_sheets_service(creds):
+    """
+    Create a new Google Sheets API service object for the current thread.
+    """
     return build("sheets", "v4", credentials=creds)
 
 def get_drive_service(creds):
+    """
+    Create a new Google Drive API service object for the current thread.
+    """
     return build('drive', 'v3', credentials=creds)
 
 if __name__ == "__main__":
-    create_sheet("test")
+    creds = get_credentials()
+    sheets_service = get_sheets_service(creds)
+    print("Sheets service created successfully.")
