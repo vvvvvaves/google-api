@@ -1,5 +1,5 @@
 import json
-from creds_and_service import get_credentials, get_sheets_service
+from .creds_and_service import get_credentials, get_sheets_service
 from googleapiclient.errors import HttpError
 
 
@@ -16,6 +16,43 @@ def create_sheet(service, title):
     except HttpError as error:
         print(f"An error occurred: {error}")
         return error
+
+
+def add_sheet_to_spreadsheet(service, spreadsheet_id, sheet_title=None):
+    """
+    Adds a new sheet (tab) to an existing Google Spreadsheet.
+    :param service: Google Sheets API service instance
+    :param spreadsheet_id: ID of the spreadsheet
+    :param sheet_title: Optional title for the new sheet. If None, uses 'SheetN'.
+    :return: The new sheet's ID, or None if failed.
+    """
+    try:
+        # If no title provided, generate 'SheetN' where N is next available
+        if sheet_title is None:
+            spreadsheet = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+            existing_titles = [sheet['properties']['title'] for sheet in spreadsheet.get('sheets', [])]
+            sheet_title = f"Sheet{len(existing_titles) + 1}"
+        request_body = {
+            "requests": [
+                {
+                    "addSheet": {
+                        "properties": {
+                            "title": sheet_title
+                        }
+                    }
+                }
+            ]
+        }
+        response = service.spreadsheets().batchUpdate(
+            spreadsheetId=spreadsheet_id,
+            body=request_body
+        ).execute()
+        new_sheet_id = response['replies'][0]['addSheet']['properties']['sheetId']
+        print(f"Added sheet '{sheet_title}' with ID {new_sheet_id}")
+        return new_sheet_id
+    except HttpError as error:
+        print(f"An error occurred: {error}")
+        return None
 
 
 def create_table_from_schema(service, spreadsheet_id, sheet_id, schema_path, table_name="Flashcards Table", start_row=0, start_col=0):
@@ -37,14 +74,14 @@ def create_table_from_schema(service, spreadsheet_id, sheet_id, schema_path, tab
     # Load schema
     with open(schema_path, "r") as f:
         schema = json.load(f)
-    properties = schema["json_schema"]["schema"]["properties"]["flashcards"]["items"]["properties"]
+    properties = schema["properties"]
 
     # Map JSON schema types to Sheets table column types
     type_map = {
         "string": "TEXT",
         "number": "TEXT",
         "integer": "TEXT",
-        "boolean": "CHECKBOX"
+        "boolean": "TEXT"
     }
 
     column_properties = []
@@ -202,6 +239,7 @@ def add_rows_to_sheet(service, spreadsheet_id, sheet_id, data_dicts, column_orde
     except HttpError as error:
         print(f"An error occurred: {error}")
         return None
+
 
 
 if __name__ == "__main__":
