@@ -362,6 +362,35 @@ def get_rows_from_range(service, spreadsheet_id, sheet_id, start_row, end_row, s
         return None
 
 
+def get_all_rows_from_sheet(service, spreadsheet_id, sheet_id):
+    """
+    Retrieves all non-empty rows from a Google Sheet by sheet ID, ensuring each row has the same number of columns as the header (filling missing cells with empty strings).
+    :param service: Google Sheets API service instance
+    :param spreadsheet_id: ID of the spreadsheet
+    :param sheet_id: ID of the sheet/tab (as integer)
+    :return: List of rows (each row is a list of cell values, padded to header length)
+    """
+    sheet_name = _get_sheet_name_by_id(service, spreadsheet_id, sheet_id)
+    if not sheet_name:
+        print(f"Could not resolve sheet name for sheet_id {sheet_id}")
+        return None
+    try:
+        http = google_auth_httplib2.AuthorizedHttp(get_credentials(), http=httplib2.Http())
+        result = service.spreadsheets().values().get(
+            spreadsheetId=spreadsheet_id,
+            range=sheet_name
+        ).execute(http=http)
+        rows = result.get('values', [])
+        if not rows:
+            return []
+        num_columns = len(rows[0])  # Assume first row is header
+        padded_rows = [row + [""] * (num_columns - len(row)) for row in rows]
+        return padded_rows
+    except HttpError as error:
+        print(f"An error occurred: {error}")
+        return None
+
+
 if __name__ == "__main__":
     creds = get_credentials(token_path='token.json', client_secrets_path='client_secrets.json')
     service = get_sheets_service(creds)
