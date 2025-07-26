@@ -25,12 +25,14 @@ def create_sheet(service, title):
         return error
 
 
-def add_sheet_to_spreadsheet(service, spreadsheet_id, sheet_title=None):
+def add_sheet_to_spreadsheet(service, spreadsheet_id, sheet_title=None, num_columns=50, num_rows=None):
     """
     Adds a new sheet (tab) to an existing Google Spreadsheet.
     :param service: Google Sheets API service instance
     :param spreadsheet_id: ID of the spreadsheet
     :param sheet_title: Optional title for the new sheet. If None, uses 'SheetN'.
+    :param num_columns: Optional number of columns for the new sheet.
+    :param num_rows: Optional number of rows for the new sheet.
     :return: The new sheet's ID, or None if failed.
     """
     try:
@@ -58,6 +60,37 @@ def add_sheet_to_spreadsheet(service, spreadsheet_id, sheet_title=None):
         ).execute(http=http)
         new_sheet_id = response['replies'][0]['addSheet']['properties']['sheetId']
         print(f"Added sheet '{sheet_title}' with ID {new_sheet_id}")
+
+        # If custom columns or rows are specified, update the sheet properties safely
+        grid_properties = {}
+        fields = []
+        if num_columns is not None and num_columns > 0:
+            grid_properties["columnCount"] = num_columns
+            fields.append("gridProperties.columnCount")
+        if num_rows is not None and num_rows > 0:
+            grid_properties["rowCount"] = num_rows
+            fields.append("gridProperties.rowCount")
+        if grid_properties:
+            update_properties = {
+                "sheetId": new_sheet_id,
+                "gridProperties": grid_properties
+            }
+            update_request_body = {
+                "requests": [
+                    {
+                        "updateSheetProperties": {
+                            "properties": update_properties,
+                            "fields": ",".join(fields)
+                        }
+                    }
+                ]
+            }
+            http = google_auth_httplib2.AuthorizedHttp(get_credentials(), http=httplib2.Http())
+            service.spreadsheets().batchUpdate(
+                spreadsheetId=spreadsheet_id,
+                body=update_request_body
+            ).execute(http=http)
+            print(f"Updated sheet '{sheet_title}' with columns={num_columns}, rows={num_rows}")
         return new_sheet_id
     except HttpError as error:
         print(f"An error occurred: {error}")
@@ -81,8 +114,11 @@ def create_table_from_schema(service, spreadsheet_id, sheet_id, schema_path, tab
     if not re.match(r'^[A-Za-z0-9_ ]+$', table_name):
         raise ValueError("Table name must contain only letters, numbers, underscores, or spaces.")
     # Load schema
-    with open(schema_path, "r") as f:
-        schema = json.load(f)
+    if isinstance(schema_path, dict):
+        schema = schema_path
+    else:
+        with open(schema_path, "r") as f:
+            schema = json.load(f)
     properties = schema["properties"]
 
     # Map JSON schema types to Sheets table column types
@@ -117,6 +153,12 @@ def create_table_from_schema(service, spreadsheet_id, sheet_id, schema_path, tab
     # Table range: for now, just header row (expand as needed)
     end_col = start_col + len(column_properties)
     end_row = start_row + 2  # header + 1 empty row
+
+    print('table_name', table_name)
+    print('start_col', start_col)
+    print('end_col', end_col)
+    print('len(column_properties)', len(column_properties))
+    print('column_properties', column_properties)
 
     table_request = {
         "addTable": {
@@ -267,7 +309,57 @@ def add_rows_to_sheet(service, spreadsheet_id, sheet_id, data_dicts, column_orde
         if error.response_code == 400:
             print(json.dumps(data_dicts, indent=4))
         return None
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        return None
 
+
+def _col_num_to_letter(n):
+    """Convert a 1-indexed column number to a column letter (e.g., 1 -> 'A', 27 -> 'AA')."""
+    result = ''
+    while n > 0:
+        n, rem = divmod(n - 1, 26)
+        result = chr(65 + rem) + result
+    return result
+
+
+def get_rows_from_range(service, spreadsheet_id, sheet_id, start_row, end_row, start_col=None, end_col=None):
+    """
+    Retrieves rows from a specific range in a Google Sheet using numeric indices.
+    :param service: Google Sheets API service instance
+    :param spreadsheet_id: ID of the spreadsheet
+    :param sheet_id: ID of the sheet/tab (as integer)
+    :param start_row: First row number (1-indexed, inclusive)
+    :param end_row: Last row number (1-indexed, inclusive)
+    :param start_col: First column number (1-indexed, optional)
+    :param end_col: Last column number (1-indexed, optional, exclusive)
+    :return: List of rows (each row is a list of cell values)
+    """
+    sheet_name = _get_sheet_name_by_id(service, spreadsheet_id, sheet_id)
+    if not sheet_name:
+        print(f"Could not resolve sheet name for sheet_id {sheet_id}")
+        return None
+    # Build A1 notation
+    if start_col and end_col:
+        start_col_letter = _col_num_to_letter(start_col)
+        end_col_letter = _col_num_to_letter(end_col - 1)
+        range_notation = f"{sheet_name}!{start_col_letter}{start_row}:{end_col_letter}{end_row}"
+    elif start_col:
+        start_col_letter = _col_num_to_letter(start_col)
+        range_notation = f"{sheet_name}!{start_col_letter}{start_row}:{start_col_letter}{end_row}"
+    else:
+        range_notation = f"{sheet_name}!{start_row}:{end_row}"
+    try:
+        http = google_auth_httplib2.AuthorizedHttp(get_credentials(), http=httplib2.Http())
+        result = service.spreadsheets().values().get(
+            spreadsheetId=spreadsheet_id,
+            range=range_notation
+        ).execute(http=http)
+        rows = result.get('values', [])
+        return rows
+    except HttpError as error:
+        print(f"An error occurred: {error}")
+        return None
 
 
 if __name__ == "__main__":
