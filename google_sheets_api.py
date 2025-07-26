@@ -260,7 +260,7 @@ def add_rows_to_sheet(service, spreadsheet_id, sheet_id, data_dicts, column_orde
             insertDataOption='INSERT_ROWS',
             body=body
         ).execute(http=http)
-        print(f"{len(values)} row(s) appended.")
+        # print(f"{len(values)} row(s) appended.")
         return result
     except HttpError as error:
         print(f"An error occurred: {error}")
