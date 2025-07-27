@@ -18,7 +18,7 @@ def create_sheet(service, title):
             .create(body=spreadsheet, fields="spreadsheetId")
             .execute(http=http)
         )
-        print(f"Spreadsheet ID: {(spreadsheet.get('spreadsheetId'))}")
+        print(f"✓ Spreadsheet ID: {(spreadsheet.get('spreadsheetId'))}")
         return spreadsheet.get("spreadsheetId")
     except HttpError as error:
         print(f"An error occurred: {error}")
@@ -59,7 +59,7 @@ def add_sheet_to_spreadsheet(service, spreadsheet_id, sheet_title=None, num_colu
             body=request_body
         ).execute(http=http)
         new_sheet_id = response['replies'][0]['addSheet']['properties']['sheetId']
-        print(f"Added sheet '{sheet_title}' with ID {new_sheet_id}")
+        print(f"✓ Added sheet '{sheet_title}' with ID {new_sheet_id}")
 
         # If custom columns or rows are specified, update the sheet properties safely
         grid_properties = {}
@@ -90,7 +90,7 @@ def add_sheet_to_spreadsheet(service, spreadsheet_id, sheet_title=None, num_colu
                 spreadsheetId=spreadsheet_id,
                 body=update_request_body
             ).execute(http=http)
-            print(f"Updated sheet '{sheet_title}' with columns={num_columns}, rows={num_rows}")
+            print(f"✓ Updated sheet '{sheet_title}' with columns={num_columns}, rows={num_rows}")
         return new_sheet_id
     except HttpError as error:
         print(f"An error occurred: {error}")
@@ -154,12 +154,6 @@ def create_table_from_schema(service, spreadsheet_id, sheet_id, schema_path, tab
     end_col = start_col + len(column_properties)
     end_row = start_row + 2  # header + 1 empty row
 
-    print('table_name', table_name)
-    print('start_col', start_col)
-    print('end_col', end_col)
-    print('len(column_properties)', len(column_properties))
-    print('column_properties', column_properties)
-
     table_request = {
         "addTable": {
             "table": {
@@ -183,7 +177,7 @@ def create_table_from_schema(service, spreadsheet_id, sheet_id, schema_path, tab
             spreadsheetId=spreadsheet_id,
             body={"requests": [table_request]}
         ).execute(http=http)
-        print("Table created:", response)
+        print("✓ Table created")
 
         # Set default column width for all columns in the table
         column_width_request = {
@@ -205,7 +199,7 @@ def create_table_from_schema(service, spreadsheet_id, sheet_id, schema_path, tab
             spreadsheetId=spreadsheet_id,
             body={"requests": [column_width_request]}
         ).execute(http=http)
-        print("Column width set:", width_response)
+        print("Column width set")
 
         # Set text wrapping for the table range
         wrap_request = {
@@ -230,7 +224,7 @@ def create_table_from_schema(service, spreadsheet_id, sheet_id, schema_path, tab
             spreadsheetId=spreadsheet_id,
             body={"requests": [wrap_request]}
         ).execute(http=http)
-        print("Text wrapping applied:", wrap_response)
+        print("Text wrapping applied")
         return response
     except HttpError as error:
         print(f"An error occurred: {error}")
@@ -253,22 +247,22 @@ def _get_sheet_name_by_id(service, spreadsheet_id, sheet_id):
         return None
 
 
-def add_rows_to_sheet(service, spreadsheet_id, sheet_id, data_dicts, column_order):
+def add_rows_to_sheet(service, spreadsheet_id, sheet_id, rows, column_order):
     """
     Appends one or more dictionaries as rows to a Google Sheet, using the provided column order.
     :param service: Google Sheets API service instance
     :param spreadsheet_id: ID of the spreadsheet
     :param sheet_id: ID of the sheet/tab (as integer)
-    :param data_dicts: dict or list of dicts to append as rows
+    :param rows: list of dicts to append as rows
     :param column_order: list of column names (order for the sheet)
     """
     # Accept single dict or list of dicts
-    if isinstance(data_dicts, dict):
-        data_dicts = [data_dicts]
+    if isinstance(rows, dict):
+        rows = [rows]
 
     # Prepare values in correct order
     values = []
-    for item in data_dicts:
+    for item in rows:
         row = []
         for col in column_order:
             col_value = item.get(col, "")
@@ -306,8 +300,8 @@ def add_rows_to_sheet(service, spreadsheet_id, sheet_id, data_dicts, column_orde
         return result
     except HttpError as error:
         print(f"An error occurred: {error}")
-        if error.response_code == 400:
-            print(json.dumps(data_dicts, indent=4))
+        if error.response_status == 400:
+            print(json.dumps(rows, indent=4))
         return None
     except Exception as e:
         print(f"An error occurred: {e}")
