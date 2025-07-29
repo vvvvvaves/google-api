@@ -7,6 +7,9 @@ from google.auth.transport.requests import Request
 
 SCOPES = [
     'https://www.googleapis.com/auth/drive.file',
+    'https://www.googleapis.com/auth/gmail.compose',
+    'https://www.googleapis.com/auth/gmail.modify',
+    'https://www.googleapis.com/auth/gmail.readonly',
 ]
 
 def get_credentials(token_path='token.json', client_secrets_path='client_secrets.json'):
@@ -40,6 +43,12 @@ def get_drive_service(creds):
     Create a new Google Drive API service object for the current thread.
     """
     return build('drive', 'v3', credentials=creds)
+
+def get_gmail_service(creds):
+    """
+    Create a new Gmail API service object for the current thread.
+    """
+    return build('gmail', 'v1', credentials=creds)
 
 if __name__ == "__main__":
     creds = get_credentials()
