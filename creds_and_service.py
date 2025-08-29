@@ -12,7 +12,7 @@ SCOPES = [
     'https://www.googleapis.com/auth/gmail.readonly',
 ]
 
-def get_credentials(token_path='token.json', client_secrets_path='client_secrets.json'):
+def get_credentials(token_path='token.json', client_secret_path='client_secret.json'):
     """
     Get Google API credentials using google-auth and google-auth-oauthlib.
     Handles token refresh and initial OAuth flow as needed.
@@ -25,7 +25,7 @@ def get_credentials(token_path='token.json', client_secrets_path='client_secrets
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
-            flow = InstalledAppFlow.from_client_secrets_file(client_secrets_path, SCOPES)
+            flow = InstalledAppFlow.from_client_secrets_file(client_secret_path, SCOPES)
             creds = flow.run_local_server(port=0)
         # Save the credentials for the next run
         with open(token_path, 'w') as token:

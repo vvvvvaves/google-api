@@ -4,7 +4,10 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email import encoders
-from creds_and_service import get_credentials, get_gmail_service as get_gmail_service_from_creds
+try:
+    from .creds_and_service import get_credentials, get_gmail_service as get_gmail_service_from_creds
+except ImportError:
+    from creds_and_service import get_credentials, get_gmail_service as get_gmail_service_from_creds
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 import google_auth_httplib2

@@ -1,4 +1,7 @@
-from creds_and_service import get_drive_service, get_credentials
+try:
+    from .creds_and_service import get_drive_service, get_credentials
+except ImportError:
+    from creds_and_service import get_drive_service, get_credentials
 import io
 
 
