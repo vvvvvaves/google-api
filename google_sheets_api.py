@@ -412,8 +412,8 @@ class SheetHandler(GoogleSheetsHandler):
         self.df_last_updated = None
         self.delta_update_minutes = delta_update_minutes
 
-    def get_dataframe(self):
-        if self.df is not None and self.df_last_updated is not None and self.df_last_updated + timedelta(minutes=self.delta_update_minutes) > datetime.now():
+    def get_dataframe(self, force_update=True):
+        if not force_update and self.df is not None and self.df_last_updated is not None and self.df_last_updated + timedelta(minutes=self.delta_update_minutes) > datetime.now():
             return self.df
         rows = self.get_all_rows_from_sheet(spreadsheet_id=self.spreadsheet_id, sheet_id=self.sheet_id)
         columns = rows[0]
