@@ -9,6 +9,7 @@ import httplib2
 from datetime import datetime, timedelta
 import pandas as pd
 from threading import Lock
+import os
 
 """
 The google-api-python-client library is built on top of the httplib2 library, which is not thread-safe. Therefore, if you are running as a multi-threaded application, each thread that you are making requests from must have its own instance of httplib2.Http().
@@ -16,8 +17,8 @@ https://github.com/nithinmurali/pygsheets/issues/291
 https://googleapis.github.io/google-api-python-client/docs/thread_safety.html
 """
 class GoogleSheetsHandler:
-    def __init__(self, creds_path, client_secret_path):
-        self.creds = get_credentials(token_path=creds_path, client_secret_path=client_secret_path)
+    def __init__(self, creds=None, client_secret=None):
+        self.creds = get_credentials(token=creds, client_secret=client_secret)
         self.service = get_sheets_service(self.creds)
 
     def get_columns(self, spreadsheet_id, sheet_id):
@@ -115,13 +116,13 @@ class GoogleSheetsHandler:
             return None
 
 
-    def create_table_from_schema(self, spreadsheet_id, sheet_id, schema_path, table_name="Flashcards Table", start_row=0, start_col=0):
+    def create_table_from_schema(self, spreadsheet_id, sheet_id, schema, table_name="Flashcards Table", start_row=0, start_col=0):
         """
         Creates a Google Sheets table based on a JSON schema.
         :param service: Google Sheets API service instance
         :param spreadsheet_id: ID of the spreadsheet
         :param sheet_id: ID of the sheet/tab within the spreadsheet
-        :param schema_path: Path to the JSON schema file
+        :param schema: Path to the JSON schema file or dict, or str of json
         :param table_name: Name for the table
         :param start_row: Starting row index for the table
         :param start_col: Starting column index for the table
@@ -132,11 +133,18 @@ class GoogleSheetsHandler:
         if not re.match(r'^[A-Za-z0-9_ ]+$', table_name):
             raise ValueError("Table name must contain only letters, numbers, underscores, or spaces.")
         # Load schema
-        if isinstance(schema_path, dict):
-            schema = schema_path
-        else:
-            with open(schema_path, "r") as f:
+        if isinstance(schema, dict):
+            schema = schema
+        elif isinstance(schema, str) and os.path.exists(schema):
+            with open(schema, "r") as f:
                 schema = json.load(f)
+        elif isinstance(schema, str):
+            try:
+                schema = json.loads(schema)
+            except json.JSONDecodeError:
+                raise ValueError("Invalid schema format")
+        else:
+            raise ValueError("Invalid schema format")
         properties = schema["properties"]
 
         # Map JSON schema types to Sheets table column types
@@ -403,8 +411,8 @@ class GoogleSheetsHandler:
             return None
 
 class SheetHandler(GoogleSheetsHandler):
-    def __init__(self, creds_path, client_secret_path, delta_update_minutes=1):
-        super().__init__(creds_path, client_secret_path)
+    def __init__(self, creds, client_secret, delta_update_minutes=1):
+        super().__init__(creds, client_secret)
         self.spreadsheet_id = None
         self.sheet_id = None
         self.columns = None
@@ -448,14 +456,14 @@ class SheetHandler(GoogleSheetsHandler):
         self.sheet_id = super().add_sheet_to_spreadsheet(self.spreadsheet_id, sheet_title)
         return self.sheet_id
     
-    def create_table_from_schema(self, schema_path, table_name, start_row=0, start_col=0):
+    def create_table_from_schema(self, schema, table_name, start_row=0, start_col=0):
         if not self.spreadsheet_id:
             print("Spreadsheet not created yet")
             return None
         if not self.sheet_id:
             print("Sheet not added yet")
             return None
-        response = super().create_table_from_schema(self.spreadsheet_id, self.sheet_id, schema_path, table_name, start_row, start_col)
+        response = super().create_table_from_schema(self.spreadsheet_id, self.sheet_id, schema, table_name, start_row, start_col)
         return response
     
     def add_rows_to_sheet(self, rows, column_order):
@@ -472,13 +480,13 @@ class SheetHandler(GoogleSheetsHandler):
         
 
 def main():
-    sheets_handler = SheetHandler(creds_path='token.json', client_secret_path='client_secret.json')
+    sheets_handler = SheetHandler(creds='token.json', client_secret='client_secret.json')
     spreadsheet_id = sheets_handler.create_sheet("test")
     sheet_id = 0  # or the actual sheet/tab ID
     sheets_handler.create_table_from_schema(
         spreadsheet_id,
         sheet_id,
-        "response_format.json"
+        os.environ.get("RESPONSE_FORMAT")
     )
 
     # Example usage of add_rows_to_sheet

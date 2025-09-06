@@ -189,7 +189,7 @@ def completion_callback(error, response):
 
 if __name__ == "__main__":
     # Get credentials
-    creds = get_credentials(token_path='token.json', client_secrets_path='client_secrets.json')
+    creds = get_credentials(token='token.json', client_secret='client_secrets.json')
     
     # Create Drive service
     service = get_drive_service(creds)
